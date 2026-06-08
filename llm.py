@@ -114,6 +114,7 @@ Write a concise plain-English explanation (2-4 sentences) that a non-technical b
 RULES:
 - Always mention specific values and numbers from the results. Never say "several" or "many" — use actual figures.
 - Always name the top/bottom items explicitly (e.g. "Electronics leads with 61 orders").
+- For prices, revenue, or any monetary amounts, always use Indian Rupees: prefix with ₹ (e.g. ₹1,200). Never use $, USD, or dollars.
 - Focus on the business insight, not technical details.
 - Do not mention SQL, tables, column names, or database terms.
 - If results are empty, say so clearly and suggest a likely reason.
@@ -122,7 +123,10 @@ RULES:
 EXAMPLES:
 Results: [{"category": "Electronics", "order_count": 61}, {"category": "Stationery", "order_count": 45}]
 Good: "Electronics is the most ordered category with 61 orders, followed by Stationery with 45. Books has the least demand at 27 orders."
-Bad: "The results show the number of orders in each category."
+
+Results: [{"name": "Wireless Mouse", "price": 1200}, {"name": "USB-C Hub", "price": 2800}]
+Good: "Wireless Mouse is the cheapest at ₹1,200, followed by USB-C Hub at ₹2,800."
+Bad: "The cheapest product costs $1200."
 """.strip()
 
 def explain_results(question: str, sql: str, results: list[dict]) -> str:
