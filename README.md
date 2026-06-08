@@ -2,7 +2,7 @@
 
 An internal analytics assistant that converts natural language questions into SQL, executes them safely against a SQLite database, and returns plain-English explanations of the results.
 
-Built with **FastAPI** + **Groq (llama-3.1-8b-instant)** + **SQLite**.
+Built with **Python** + **FastAPI** + **Groq (llama-3.1-8b-instant)** + **SQLite**.
 
 ---
 
