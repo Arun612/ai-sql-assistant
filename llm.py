@@ -8,6 +8,7 @@ llm.py — All Groq LLM interactions:
 
 import os
 import json
+import time
 from groq import Groq
 from database import get_schema_context
 from safety import sanitize_llm_output
@@ -24,18 +25,28 @@ MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 
 def _chat(system: str, user: str, max_tokens: int = 512) -> str:
-    """Helper: single-turn chat completion."""
+    """Helper: single-turn chat completion with rate limit retry."""
     client = _client()
-    response = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        temperature=0.1,          # low temp = more deterministic SQL
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user",   "content": user},
-        ],
-    )
-    return response.choices[0].message.content.strip()
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                max_tokens=max_tokens,
+                temperature=0.1,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user},
+                ],
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            error_str = str(e).lower()
+            if "rate_limit" in error_str and attempt < 2:
+                wait = 2 ** attempt   # 1s, 2s
+                print(f"[Groq] Rate limit hit, retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                raise
 
 
 # ── 1. NL → SQL ──────────────────────────────────────────────────────────────
@@ -80,6 +91,17 @@ def generate_sql(question: str) -> str:
     """Convert a natural language question to a SQLite SELECT query."""
     system = SQL_SYSTEM.format(schema=get_schema_context())
     raw = _chat(system, question, max_tokens=256)
+    return sanitize_llm_output(raw)
+
+def generate_sql_with_retry(question: str, error: str) -> str:
+    """Retry SQL generation with the execution error as context."""
+    system = SQL_SYSTEM.format(schema=get_schema_context())
+    user = f"""Question: {question}
+
+    Your previous SQL failed with this error: {error}
+
+    Fix the SQL and return only the corrected query, nothing else."""
+    raw = _chat(system, user, max_tokens=256)
     return sanitize_llm_output(raw)
 
 

@@ -15,8 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from database import init_db, execute_query, get_schema_context
-from safety import validate_sql
-from llm import generate_sql, explain_results, explain_sql_query, recommend_chart
+from safety import validate_sql, inject_limit
+from llm import generate_sql, generate_sql_with_retry, explain_results, explain_sql_query, recommend_chart
 from logger import log_query, get_logs
 
 
@@ -109,19 +109,10 @@ def get_schema():
 
 @app.post(
     "/query",
-    response_model=QueryResponse,
     tags=["Query"],
     summary="Convert a natural language question to SQL and execute it",
 )
 def query(body: QueryRequest):
-    """
-    **Main endpoint.**
-
-    1. Converts your question to SQLite SQL using an LLM.
-    2. Validates the SQL for safety (SELECT-only).
-    3. Executes the SQL against the sample database.
-    4. Returns structured results + a plain-English explanation.
-    """
     start = time.perf_counter()
     question = body.question.strip()
 
@@ -132,14 +123,22 @@ def query(body: QueryRequest):
         log_query(question, None, None, False, f"LLM error: {e}")
         raise HTTPException(
             status_code=502,
-            detail=f"LLM service error while generating SQL: {str(e)}",
+            detail={
+                "error_code": "LLM_ERROR",
+                "message": "LLM service error while generating SQL.",
+                "detail": str(e),
+            }
         )
 
     if not sql:
         log_query(question, sql, None, False, "LLM returned empty SQL")
         raise HTTPException(
             status_code=422,
-            detail="The model could not generate a SQL query for this question. Try rephrasing.",
+            detail={
+                "error_code": "EMPTY_SQL",
+                "message": "The model could not generate a SQL query for this question.",
+                "detail": "Try rephrasing your question.",
+            }
         )
 
     # ── Step 2: Safety Validation ────────────────────────────────────────────
@@ -148,36 +147,64 @@ def query(body: QueryRequest):
         log_query(question, sql, None, False, f"Safety: {validation.reason}")
         raise HTTPException(
             status_code=400,
-            detail=f"Generated SQL failed safety check: {validation.reason}",
+            detail={
+                "error_code": "SQL_SAFETY_VIOLATION",
+                "message": "Generated SQL failed safety check.",
+                "detail": validation.reason,
+            }
         )
 
-    # ── Step 3: Execute Query ────────────────────────────────────────────────
+    # ── Step 3: Auto-inject LIMIT ────────────────────────────────────────────
+    sql = inject_limit(sql)
+
+    # ── Step 4: Execute Query (with one retry on failure) ────────────────────
     try:
         results = execute_query(sql)
     except sqlite3.Error as e:
-        log_query(question, sql, None, False, f"SQLite: {e}")
-        raise HTTPException(
-            status_code=422,
-            detail=f"SQL execution error: {str(e)}. The generated SQL may be incorrect for this question.",
-        )
+        # Retry once with error context
+        print(f"[SQL] Execution failed: {e}. Retrying with error context...")
+        try:
+            sql = generate_sql_with_retry(question, str(e))
+            validation = validate_sql(sql)
+            if not validation.is_safe:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error_code": "SQL_SAFETY_VIOLATION",
+                        "message": "Retried SQL failed safety check.",
+                        "detail": validation.reason,
+                    }
+                )
+            sql = inject_limit(sql)
+            results = execute_query(sql)
+        except sqlite3.Error as e2:
+            log_query(question, sql, None, False, f"SQLite retry failed: {e2}")
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "SQL_EXECUTION_ERROR",
+                    "message": "SQL execution failed after retry.",
+                    "detail": str(e2),
+                }
+            )
 
     elapsed_ms = (time.perf_counter() - start) * 1000
 
-    # ── Step 4: Explain Results ──────────────────────────────────────────────
+    # ── Step 5: Explain Results ──────────────────────────────────────────────
     try:
         explanation = explain_results(question, sql, results)
-    except Exception as e:
-        explanation = f"Query returned {len(results)} row(s)."   # graceful fallback
+    except Exception:
+        explanation = f"Query returned {len(results)} row(s)."
 
-    # ── Step 5: Chart Recommendation (optional) ──────────────────────────────
+    # ── Step 6: Chart Recommendation ────────────────────────────────────────
     chart = None
     if body.include_chart_suggestion and results:
         try:
             chart = recommend_chart(question, results)
         except Exception:
-            chart = None    # non-critical — don't fail the request
+            chart = None
 
-    # ── Step 6: Log & Return ─────────────────────────────────────────────────
+    # ── Step 7: Log & Return ─────────────────────────────────────────────────
     log_query(question, sql, len(results), True, duration_ms=elapsed_ms)
 
     return QueryResponse(

@@ -108,3 +108,12 @@ def sanitize_llm_output(raw: str) -> str:
     result = result.rstrip(";").strip()
 
     return result
+
+def inject_limit(sql: str, default_limit: int = 100) -> str:
+    """
+    Auto-inject LIMIT if the query doesn't already have one.
+    Prevents accidental full-table dumps.
+    """
+    if "LIMIT" not in sql.upper():
+        return f"{sql} LIMIT {default_limit}"
+    return sql
