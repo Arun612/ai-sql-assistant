@@ -103,17 +103,35 @@ Convert a natural language question to SQL and get results.
 **Response:**
 ```json
 {
-  "sql": "SELECT c.name, COUNT(o.id) AS order_count FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id ORDER BY order_count DESC LIMIT 5",
+  "sql": "SELECT c.name, COUNT(o.id) AS order_count FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id, c.name ORDER BY order_count DESC LIMIT 5",
   "results": [
-    {"name": "Rahul Sharma", "order_count": 12},
-    {"name": "Priya Patel",  "order_count": 10}
+    {
+      "name": "Rahul Kumar",
+      "order_count": 11
+    },
+    {
+      "name": "Priya Kumar",
+      "order_count": 9
+    },
+    {
+      "name": "Sneha Nair",
+      "order_count": 9
+    },
+    {
+      "name": "Arjun Patel",
+      "order_count": 8
+    },
+    {
+      "name": "Sneha Joshi",
+      "order_count": 8
+    }
   ],
-  "explanation": "Rahul Sharma leads with 12 orders, followed by Priya Patel with 10. The top 5 customers account for a significant share of total order volume.",
+  "explanation": "Rahul Kumar leads the top customers with 11 orders, followed closely by Priya Kumar and Sneha Nair with 9 orders each. Arjun Patel and Sneha Joshi come in fourth and fifth with 8 orders each.",
   "row_count": 5,
-  "duration_ms": 843.21,
+  "duration_ms": 434.51,
   "chart": {
     "chart_type": "bar",
-    "reason": "Bar chart best compares order counts across named customers.",
+    "reason": "comparing values across named categories without time",
     "x_axis": "name",
     "y_axis": "order_count"
   }
