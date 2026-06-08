@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+venv/
+database.db
+query_logs.json
