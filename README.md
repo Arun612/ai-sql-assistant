@@ -262,3 +262,80 @@ ai-sql-assistant/
 ├── .env.example
 └── README.md
 ```
+
+## Sample Outputs
+
+### 1. Single value query
+**Question:** "How many orders were placed last month?"
+```json
+{
+  "sql": "SELECT COUNT(*) AS order_count FROM orders WHERE strftime('%Y-%m', order_date) = strftime('%Y-%m', date('now', '-1 month'))",
+  "results": [{"order_count": 70}],
+  "explanation": "70 orders were placed last month...",
+  "row_count": 1,
+  "duration_ms": 4466.15,
+  "chart": {"chart_type": "table", "reason": "Single value result.", "x_axis": null, "y_axis": null}
+}
+```
+
+### 2. JOIN query with bar chart
+**Question:** "Show top 5 customers by number of orders"
+```json
+{
+  "sql": "SELECT customers.name, COUNT(orders.id) AS num_orders FROM customers JOIN orders ON customers.id = orders.customer_id GROUP BY customers.id ORDER BY num_orders DESC LIMIT 5",
+  "results": [
+    {"name": "Rahul Kumar", "num_orders": 11},
+    {"name": "Sneha Nair",  "num_orders": 9},
+    {"name": "Priya Kumar", "num_orders": 9},
+    {"name": "Sneha Joshi", "num_orders": 8},
+    {"name": "Arjun Patel", "num_orders": 8}
+  ],
+  "explanation": "Rahul Kumar leads with 11 orders, followed by Sneha Nair and Priya Kumar with 9 each...",
+  "row_count": 5,
+  "duration_ms": 550.11,
+  "chart": {"chart_type": "bar", "reason": "Comparing order counts across customers.", "x_axis": "name", "y_axis": "num_orders"}
+}
+```
+
+### 3. 3-table JOIN with aggregation
+**Question:** "What is the average order value for each city?"
+```json
+{
+  "sql": "SELECT c.city, AVG(p.price * o.quantity) AS avg_order_value FROM customers c JOIN orders o ON c.id = o.customer_id JOIN products p ON o.product_id = p.id GROUP BY c.city",
+  "results": [
+    {"city": "Ahmedabad", "avg_order_value": 60410.0},
+    {"city": "Bangalore", "avg_order_value": 7204.12},
+    {"city": "Chennai",   "avg_order_value": 18096.07}
+  ],
+  "explanation": "Ahmedabad has the highest average order value at ₹60,410 while Bangalore has the lowest at ₹7,204...",
+  "row_count": 10,
+  "duration_ms": 1892.57,
+  "chart": {"chart_type": "bar", "reason": "Comparing average order values across cities.", "x_axis": "city", "y_axis": "avg_order_value"}
+}
+```
+
+### 4. Distribution query with pie chart
+**Question:** "Show the distribution of customers across cities"
+```json
+{
+  "sql": "SELECT city, COUNT(*) AS customer_count FROM customers GROUP BY city ORDER BY customer_count DESC",
+  "results": [
+    {"city": "Surat",     "customer_count": 6},
+    {"city": "Jaipur",    "customer_count": 5},
+    {"city": "Delhi",     "customer_count": 5}
+  ],
+  "explanation": "Surat leads with 6 customers, followed by Jaipur, Delhi, and Chennai with 5 each...",
+  "row_count": 10,
+  "duration_ms": 441.53,
+  "chart": {"chart_type": "pie", "reason": "Distribution across cities suits a pie chart.", "x_axis": "city", "y_axis": "customer_count"}
+}
+```
+
+### 5. Safety block
+**Question:** "Delete all customers from the database"
+**HTTP Status:** 400 Bad Request
+```json
+{
+  "detail": "Generated SQL failed safety check: Only SELECT queries are allowed. Got: 'DELETE'."
+}
+```
