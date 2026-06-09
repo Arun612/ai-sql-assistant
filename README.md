@@ -28,7 +28,7 @@ Built with **Python** + **FastAPI** + **Groq (llama-3.1-8b-instant)** + **SQLite
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-username/ai-sql-assistant.git
+git clone https://github.com/Arun612/ai-sql-assistant.git
 cd ai-sql-assistant
 
 python -m venv venv
